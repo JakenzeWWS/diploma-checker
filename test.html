@@ -22,6 +22,45 @@ function run() {
   assert('RULES.heading.sizePt is 20', DocxChecker.RULES.heading.sizePt === 20);
   assert('RULES.margins.leftCm is 3', DocxChecker.RULES.margins.leftCm === 3.0);
 
+  // Task 3: parseStyles
+  const FAKE_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>
+      <w:sz w:val="28"/>
+    </w:rPr>
+    <w:pPr>
+      <w:jc w:val="both"/>
+      <w:spacing w:line="240" w:lineRule="auto"/>
+    </w:pPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1">
+    <w:name w:val="heading 1"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman"/>
+      <w:sz w:val="40"/>
+      <w:b/>
+    </w:rPr>
+    <w:pPr>
+      <w:jc w:val="left"/>
+    </w:pPr>
+  </w:style>
+</w:styles>`;
+
+  const styleMap = DocxChecker.parseStyles(FAKE_STYLES_XML);
+  assert('parseStyles returns a Map', styleMap instanceof Map);
+  assert('Normal style exists', styleMap.has('Normal'));
+  assert('Normal font is Times New Roman', styleMap.get('Normal').font === 'Times New Roman');
+  assert('Normal sizePt is 14', styleMap.get('Normal').sizePt === 14);
+  assert('Normal alignment is both', styleMap.get('Normal').alignment === 'both');
+  assert('Normal lineSpacingTwips is 240', styleMap.get('Normal').lineSpacingTwips === 240);
+  assert('Heading1 exists', styleMap.has('Heading1'));
+  assert('Heading1 normalizedName is heading 1', styleMap.get('Heading1').normalizedName === 'heading 1');
+  assert('Heading1 sizePt is 20', styleMap.get('Heading1').sizePt === 20);
+  assert('Heading1 bold is true', styleMap.get('Heading1').bold === true);
+
   const passed = results.filter(r => r.pass).length;
   out.textContent = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.desc).join('\n');
   out.textContent += `\n\n${passed}/${results.length} passed`;

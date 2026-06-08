@@ -50,7 +50,64 @@ const DocxChecker = (() => {
     return parseFloat((parseInt(twips, 10) * CM_PER_TWIP).toFixed(3));
   }
 
-  function parseStyles(xmlString) { return new Map(); }
+  function parseStyles(xmlString) {
+    const doc = parseXml(xmlString);
+    const styleMap = new Map();
+
+    for (const styleEl of els(doc, 'style')) {
+      const styleId = attr(styleEl, 'styleId');
+      if (!styleId) continue;
+
+      const nameEl = el(styleEl, 'name');
+      const normalizedName = (attr(nameEl, 'val') || '').toLowerCase();
+
+      const entry = { normalizedName };
+
+      const rPr = el(styleEl, 'rPr');
+      if (rPr) {
+        const fonts = el(rPr, 'rFonts');
+        if (fonts) {
+          entry.font = attr(fonts, 'ascii') || attr(fonts, 'hAnsi') || null;
+        }
+
+        const sz = el(rPr, 'sz');
+        if (sz) {
+          const val = attr(sz, 'val');
+          if (val) entry.sizePt = parseInt(val, 10) / 2;
+        }
+
+        const bEl = el(rPr, 'b');
+        if (bEl) {
+          const val = attr(bEl, 'val');
+          entry.bold = val === null || (val !== '0' && val !== 'false' && val !== 'off');
+        }
+      }
+
+      const pPr = el(styleEl, 'pPr');
+      if (pPr) {
+        const jc = el(pPr, 'jc');
+        if (jc) entry.alignment = attr(jc, 'val');
+
+        const ind = el(pPr, 'ind');
+        if (ind) {
+          const fl = attr(ind, 'firstLine');
+          if (fl !== null) entry.firstLineIndentCm = twipsToCm(fl);
+        }
+
+        const spacing = el(pPr, 'spacing');
+        if (spacing) {
+          const line = attr(spacing, 'line');
+          const lineRule = attr(spacing, 'lineRule');
+          if (line) entry.lineSpacingTwips = parseInt(line, 10);
+          if (lineRule) entry.lineSpacingRule = lineRule;
+        }
+      }
+
+      styleMap.set(styleId, entry);
+    }
+
+    return styleMap;
+  }
   function parseMargins(xmlString) { return null; }
   function parseParagraphs(xmlString) { return []; }
   function resolveFormatting(paragraph, styleMap) { return {}; }
