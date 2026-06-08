@@ -333,7 +333,33 @@ const DocxChecker = (() => {
         recommendation: `Установите ${label.toLowerCase()} ${required} см в настройках полей документа.`,
       }));
   }
-  async function checkDocument(zip) { return { marginErrors: [], paragraphResults: [], totalErrors: 0 }; }
+  async function checkDocument(zip) {
+    const docXml    = await zip.file('word/document.xml').async('string');
+    const stylesXml = await zip.file('word/styles.xml').async('string');
+
+    const styleMap = parseStyles(stylesXml);
+    const margins  = parseMargins(docXml);
+    const rawParagraphs = parseParagraphs(docXml);
+
+    const marginErrors = checkMargins(margins);
+
+    const paragraphResults = rawParagraphs.map((para, index) => {
+      const type   = classifyParagraph(para, styleMap);
+      const errors = checkParagraph(para, type, styleMap);
+      return {
+        index,
+        text:      para.text,
+        type,
+        errors,
+        hasErrors: errors.length > 0,
+      };
+    });
+
+    const totalErrors = marginErrors.length
+      + paragraphResults.filter(p => p.hasErrors).length;
+
+    return { marginErrors, paragraphResults, totalErrors };
+  }
 
   return {
     RULES, parseStyles, parseMargins, parseParagraphs,
