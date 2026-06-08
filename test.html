@@ -120,6 +120,32 @@ function run() {
   assert('second para text is ВВЕДЕНИЕ', paras[1].text === 'ВВЕДЕНИЕ');
   assert('second para run bold is true', paras[1].runFormats[0].bold === true);
 
+  // Task 5: resolveFormatting and classifyParagraph
+  // Reuse styleMap (from Task 3 FAKE_STYLES_XML) and paras (from Task 4 FAKE_DOC_XML)
+  const fmt0 = DocxChecker.resolveFormatting(paras[0], styleMap);
+  assert('resolveFormatting: font is Times New Roman', fmt0.font === 'Times New Roman');
+  assert('resolveFormatting: sizePt is 14', fmt0.sizePt === 14);
+  assert('resolveFormatting: bold is false', fmt0.bold === false);
+  assert('resolveFormatting: alignment is both', fmt0.alignment === 'both');
+  assert('resolveFormatting: indent ~1.25 cm', Math.abs(fmt0.firstLineIndentCm - 1.25) < 0.05);
+  assert('resolveFormatting: lineSpacingTwips is 240', fmt0.lineSpacingTwips === 240);
+  assert('resolveFormatting: allFonts has one entry', fmt0.allFonts.length === 1);
+
+  const fmt1 = DocxChecker.resolveFormatting(paras[1], styleMap);
+  assert('resolveFormatting heading: sizePt is 20', fmt1.sizePt === 20);
+  assert('resolveFormatting heading: bold is true', fmt1.bold === true);
+
+  assert('classifyParagraph: Normal para is body', DocxChecker.classifyParagraph(paras[0], styleMap) === 'body');
+  assert('classifyParagraph: Heading1 para is heading', DocxChecker.classifyParagraph(paras[1], styleMap) === 'heading');
+
+  // Test fallback: manual bold+size20 heading (no style name)
+  const manualHeading = {
+    styleId: 'Normal', text: 'ЗАГОЛОВОК',
+    paraOverride: {},
+    runFormats: [{ font: 'Times New Roman', sizePt: 20, bold: true }],
+  };
+  assert('classifyParagraph: bold+20pt detected as heading', DocxChecker.classifyParagraph(manualHeading, styleMap) === 'heading');
+
   const passed = results.filter(r => r.pass).length;
   out.textContent = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.desc).join('\n');
   out.textContent += `\n\n${passed}/${results.length} passed`;

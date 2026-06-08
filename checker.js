@@ -185,8 +185,52 @@ const DocxChecker = (() => {
 
     return paragraphs;
   }
-  function resolveFormatting(paragraph, styleMap) { return {}; }
-  function classifyParagraph(paragraph, styleMap) { return 'body'; }
+  function resolveFormatting(paragraph, styleMap) {
+    const normalStyle = styleMap.get('Normal') || {};
+    const paraStyle = styleMap.get(paragraph.styleId) || {};
+
+    const runFonts = paragraph.runFormats.map(r => r.font).filter(Boolean);
+    const runSizes = paragraph.runFormats.map(r => r.sizePt).filter(v => v !== undefined && v !== null);
+    const runBolds = paragraph.runFormats.map(r => r.bold).filter(v => v !== undefined);
+
+    return {
+      font:   runFonts[0]  ?? paraStyle.font  ?? normalStyle.font  ?? null,
+      sizePt: runSizes[0]  ?? paraStyle.sizePt ?? normalStyle.sizePt ?? null,
+      bold:   runBolds[0]  ?? paraStyle.bold  ?? normalStyle.bold  ?? false,
+      allFonts: [...new Set(runFonts)],
+      allSizes: [...new Set(runSizes)],
+
+      alignment: paragraph.paraOverride.alignment
+                 ?? paraStyle.alignment
+                 ?? normalStyle.alignment
+                 ?? 'left',
+      firstLineIndentCm: paragraph.paraOverride.firstLineIndentCm
+                         ?? paraStyle.firstLineIndentCm
+                         ?? normalStyle.firstLineIndentCm
+                         ?? 0,
+      lineSpacingTwips: paragraph.paraOverride.lineSpacingTwips
+                        ?? paraStyle.lineSpacingTwips
+                        ?? normalStyle.lineSpacingTwips
+                        ?? null,
+      lineSpacingRule: paragraph.paraOverride.lineSpacingRule
+                       ?? paraStyle.lineSpacingRule
+                       ?? normalStyle.lineSpacingRule
+                       ?? null,
+    };
+  }
+  function classifyParagraph(paragraph, styleMap) {
+    const styleEntry = styleMap.get(paragraph.styleId) || {};
+    const normalizedName = styleEntry.normalizedName || '';
+
+    if (normalizedName.startsWith('heading') || normalizedName.startsWith('заголовок')) {
+      return 'heading';
+    }
+
+    const fmt = resolveFormatting(paragraph, styleMap);
+    if (fmt.bold === true && fmt.sizePt === 20) return 'heading';
+
+    return 'body';
+  }
   function checkParagraph(paragraph, type, styleMap) { return []; }
   function checkMargins(margins) { return []; }
   async function checkDocument(zip) { return { marginErrors: [], paragraphResults: [], totalErrors: 0 }; }
