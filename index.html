@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Проверка оформления диплома</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- STATE 1: Upload -->
+  <div id="state-upload">
+    <div class="upload-container">
+      <h1>Проверка оформления дипломной работы</h1>
+      <p class="subtitle">Загрузите файл .docx — приложение проверит шрифт, поля, отступы и межстрочный интервал.</p>
+      <label id="drop-zone" for="file-input">
+        <div class="drop-icon">&#128196;</div>
+        <div class="drop-primary">Перетащите файл сюда</div>
+        <div class="drop-secondary">или нажмите для выбора</div>
+        <div class="drop-hint">Принимается только .docx</div>
+      </label>
+      <input type="file" id="file-input" accept=".docx" />
+      <p id="upload-error" class="upload-error" hidden></p>
+    </div>
+  </div>
+
+  <!-- STATE 2: Loading -->
+  <div id="state-loading" hidden>
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <p>Анализируем файл...</p>
+    </div>
+  </div>
+
+  <!-- STATE 3: Results -->
+  <div id="state-results" hidden>
+    <div id="summary-bar">
+      <span id="summary-filename"></span>
+      <span id="summary-errors"></span>
+      <button id="btn-reset">Проверить другой файл</button>
+    </div>
+    <div id="margin-banner" hidden>
+      <strong>Поля страницы:</strong>
+      <ul id="margin-error-list"></ul>
+    </div>
+    <div id="document-view"></div>
+  </div>
+
+  <script src="lib/jszip.min.js"></script>
+  <script src="checker.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
