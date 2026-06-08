@@ -146,6 +146,52 @@ function run() {
   };
   assert('classifyParagraph: bold+20pt detected as heading', DocxChecker.classifyParagraph(manualHeading, styleMap) === 'heading');
 
+  // Task 6: checkParagraph and checkMargins
+
+  // Correct body paragraph → no errors
+  const correctBodyErrors = DocxChecker.checkParagraph(paras[0], 'body', styleMap);
+  assert('correct body paragraph has no errors', correctBodyErrors.length === 0);
+
+  // Correct heading paragraph → no errors
+  const correctHeadingErrors = DocxChecker.checkParagraph(paras[1], 'heading', styleMap);
+  assert('correct heading paragraph has no errors', correctHeadingErrors.length === 0);
+
+  // Empty paragraph → no errors
+  const emptyPara = { styleId: 'Normal', text: '', paraOverride: {}, runFormats: [] };
+  assert('empty paragraph skipped', DocxChecker.checkParagraph(emptyPara, 'body', styleMap).length === 0);
+
+  // Wrong font
+  const wrongFontPara = {
+    styleId: 'Normal', text: 'Текст с неверным шрифтом.',
+    paraOverride: { alignment: 'both', firstLineIndentCm: 1.25, lineSpacingTwips: 240, lineSpacingRule: 'auto' },
+    runFormats: [{ font: 'Arial', sizePt: 14, bold: false }],
+  };
+  const wrongFontErrors = DocxChecker.checkParagraph(wrongFontPara, 'body', styleMap);
+  assert('wrong font produces error', wrongFontErrors.some(e => e.param === 'Шрифт'));
+  assert('wrong font error shows Arial', wrongFontErrors.find(e => e.param === 'Шрифт').current === 'Arial');
+
+  // Wrong size
+  const wrongSizePara = {
+    styleId: 'Normal', text: 'Текст с неверным размером.',
+    paraOverride: { alignment: 'both', firstLineIndentCm: 1.25, lineSpacingTwips: 240, lineSpacingRule: 'auto' },
+    runFormats: [{ font: 'Times New Roman', sizePt: 12 }],
+  };
+  const wrongSizeErrors = DocxChecker.checkParagraph(wrongSizePara, 'body', styleMap);
+  assert('wrong size produces error', wrongSizeErrors.some(e => e.param === 'Размер шрифта'));
+
+  // Correct margins → no errors
+  const correctMarginErrors = DocxChecker.checkMargins(margins);
+  assert('correct margins have no errors', correctMarginErrors.length === 0);
+
+  // Wrong left margin
+  const wrongMargins = { leftCm: 2.5, rightCm: 1.0, topCm: 2.0, bottomCm: 2.0 };
+  const wrongMarginErrors = DocxChecker.checkMargins(wrongMargins);
+  assert('wrong left margin produces error', wrongMarginErrors.some(e => e.param === 'Левое поле'));
+  assert('wrong margin current value shown', wrongMarginErrors.find(e => e.param === 'Левое поле').current === '2.50 см');
+
+  // Null margins → no errors
+  assert('null margins return empty array', DocxChecker.checkMargins(null).length === 0);
+
   const passed = results.filter(r => r.pass).length;
   out.textContent = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.desc).join('\n');
   out.textContent += `\n\n${passed}/${results.length} passed`;

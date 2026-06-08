@@ -231,8 +231,108 @@ const DocxChecker = (() => {
 
     return 'body';
   }
-  function checkParagraph(paragraph, type, styleMap) { return []; }
-  function checkMargins(margins) { return []; }
+  function checkParagraph(paragraph, type, styleMap) {
+    if (!paragraph.text.trim()) return [];
+
+    const fmt = resolveFormatting(paragraph, styleMap);
+    const rules = RULES[type];
+    const errors = [];
+
+    // Font — flag any run with wrong font
+    const badFonts = fmt.allFonts.filter(f => f !== rules.font);
+    if (badFonts.length > 0) {
+      errors.push({
+        param: 'Шрифт',
+        current: [...new Set(badFonts)].join(', '),
+        required: rules.font,
+        recommendation: `Выделите текст и смените шрифт на «${rules.font}».`,
+      });
+    }
+
+    // Size — flag any run with wrong size
+    const badSizes = fmt.allSizes.filter(s => s !== rules.sizePt);
+    if (badSizes.length > 0) {
+      errors.push({
+        param: 'Размер шрифта',
+        current: badSizes.map(s => s + ' pt').join(', '),
+        required: rules.sizePt + ' pt',
+        recommendation: `Выделите текст и установите размер ${rules.sizePt} pt.`,
+      });
+    }
+
+    // Bold — body text must not be bold
+    if (type === 'body' && fmt.bold === true) {
+      errors.push({
+        param: 'Жирный шрифт',
+        current: 'Да',
+        required: 'Нет',
+        recommendation: 'Уберите жирное начертание в основном тексте.',
+      });
+    }
+
+    // Alignment
+    const alignment = fmt.alignment || 'left';
+    if (alignment !== rules.alignment) {
+      const labels = { both: 'По ширине', left: 'По левому краю', center: 'По центру', right: 'По правому краю' };
+      errors.push({
+        param: 'Выравнивание',
+        current: labels[alignment] || alignment,
+        required: labels[rules.alignment] || rules.alignment,
+        recommendation: `Установите выравнивание: «${labels[rules.alignment]}».`,
+      });
+    }
+
+    // First line indent
+    const indent = fmt.firstLineIndentCm ?? 0;
+    if (Math.abs(indent - rules.firstLineIndentCm) > 0.05) {
+      errors.push({
+        param: 'Отступ первой строки',
+        current: indent.toFixed(2) + ' см',
+        required: rules.firstLineIndentCm + ' см',
+        recommendation: `Установите отступ первой строки ${rules.firstLineIndentCm} см.`,
+      });
+    }
+
+    // Line spacing (body only)
+    if (type === 'body') {
+      const spacingOk =
+        fmt.lineSpacingTwips === rules.lineSpacingTwips &&
+        fmt.lineSpacingRule === rules.lineSpacingRule;
+      if (!spacingOk && fmt.lineSpacingTwips !== null) {
+        const currentVal = fmt.lineSpacingTwips
+          ? (fmt.lineSpacingTwips / 240).toFixed(1)
+          : 'не определён';
+        errors.push({
+          param: 'Межстрочный интервал',
+          current: currentVal,
+          required: '1.0 (одинарный)',
+          recommendation: 'Выделите текст, откройте «Межстрочный интервал» и выберите «Одинарный».',
+        });
+      }
+    }
+
+    return errors;
+  }
+  function checkMargins(margins) {
+    if (!margins) return [];
+
+    const tol = RULES.margins.toleranceCm;
+    const checks = [
+      { key: 'leftCm',   label: 'Левое поле',   required: RULES.margins.leftCm },
+      { key: 'rightCm',  label: 'Правое поле',  required: RULES.margins.rightCm },
+      { key: 'topCm',    label: 'Верхнее поле', required: RULES.margins.topCm },
+      { key: 'bottomCm', label: 'Нижнее поле',  required: RULES.margins.bottomCm },
+    ];
+
+    return checks
+      .filter(({ key, required }) => Math.abs(margins[key] - required) > tol)
+      .map(({ label, key, required }) => ({
+        param: label,
+        current: margins[key].toFixed(2) + ' см',
+        required: required.toFixed(1) + ' см',
+        recommendation: `Установите ${label.toLowerCase()} ${required} см в настройках полей документа.`,
+      }));
+  }
   async function checkDocument(zip) { return { marginErrors: [], paragraphResults: [], totalErrors: 0 }; }
 
   return {
