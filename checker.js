@@ -122,12 +122,23 @@ const DocxChecker = (() => {
       bottomCm: twipsToCm(attr(pgMar, 'bottom')),
     };
   }
+  function isInTable(pEl) {
+    let node = pEl.parentNode;
+    while (node) {
+      if (node.localName === 'tc') return true;
+      if (node.localName === 'body') return false;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   function parseParagraphs(xmlString) {
     const doc = parseXml(xmlString);
     if (doc.documentElement.tagName === 'parsererror') return [];
     const paragraphs = [];
 
     for (const pEl of els(doc, 'p')) {
+      const inTable = isInTable(pEl);
       const pPr = el(pEl, 'pPr');
 
       let styleId = 'Normal';
@@ -181,20 +192,32 @@ const DocxChecker = (() => {
 
       const text = els(pEl, 't').map(t => t.textContent).join('');
 
-      // Detect explicit page breaks in this paragraph's runs
+      // Hard page break inside a run
       const hasPageBreakRun = els(pEl, 'br').some(br => attr(br, 'type') === 'page');
-      // Detect "always start on new page" paragraph property
+      // Soft page break — Word saves this when it auto-paginates on save
+      const hasLastRenderedBreak = els(pEl, 'lastRenderedPageBreak').length > 0;
+      // "Always start on new page" paragraph property
       const hasPageBreakBefore = pPr ? !!el(pPr, 'pageBreakBefore') : false;
 
-      paragraphs.push({ styleId, paraOverride, runFormats, text, hasPageBreakRun, hasPageBreakBefore });
+      paragraphs.push({ styleId, paraOverride, runFormats, text,
+        hasPageBreakRun, hasLastRenderedBreak, hasPageBreakBefore, inTable });
     }
 
-    // Assign startsNewPage: true when this paragraph begins a new page.
-    // A page break run at the END of paragraph N means paragraph N+1 starts a new page.
     return paragraphs.map((para, i) => {
+      // Previous paragraph ended with a hard break → this one starts a new page
       const prevHadBreak = i > 0 && paragraphs[i - 1].hasPageBreakRun;
-      const startsNewPage = i === 0 || para.hasPageBreakBefore || prevHadBreak;
-      return { styleId: para.styleId, paraOverride: para.paraOverride, runFormats: para.runFormats, text: para.text, startsNewPage };
+      const startsNewPage = i === 0
+        || para.hasPageBreakBefore
+        || para.hasLastRenderedBreak
+        || prevHadBreak;
+      return {
+        styleId: para.styleId,
+        paraOverride: para.paraOverride,
+        runFormats: para.runFormats,
+        text: para.text,
+        startsNewPage,
+        inTable: para.inTable,
+      };
     });
   }
   function resolveFormatting(paragraph, styleMap) {
@@ -367,8 +390,8 @@ const DocxChecker = (() => {
     let pageNum = 1;
     const paragraphResults = rawParagraphs.map((para, index) => {
       if (para.startsNewPage && index > 0) pageNum++;
-      const type   = classifyParagraph(para, styleMap);
-      const errors = checkParagraph(para, type, styleMap);
+      const type   = para.inTable ? 'body' : classifyParagraph(para, styleMap);
+      const errors = para.inTable ? [] : checkParagraph(para, type, styleMap);
       return {
         index,
         text:      para.text,
@@ -377,6 +400,7 @@ const DocxChecker = (() => {
         hasErrors: errors.length > 0,
         pageNum,
         startsNewPage: para.startsNewPage,
+        inTable: para.inTable,
       };
     });
 

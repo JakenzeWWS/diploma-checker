@@ -210,6 +210,7 @@ body {
 .para-body { text-align: justify; text-indent: 1.25cm; }
 .para-heading { text-align: left; text-indent: 0; font-weight: bold; font-size: 20pt; }
 .para-empty { min-height: 1em; }
+.para-table-cell { color: #555; border-left: 2px solid #e2e8f0; padding-left: 8px; font-size: 13pt; }
 
 /* ── Error Highlight + Tooltip ────────────────────────── */
 

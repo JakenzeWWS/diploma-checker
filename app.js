@@ -120,6 +120,13 @@ function renderDocument(results, filename, skipPages) {
         return;
       }
 
+      if (para.inTable) {
+        wrapper.className = 'para para-table-cell';
+        wrapper.textContent = para.text;
+        pageEl.appendChild(wrapper);
+        return;
+      }
+
       const typeClass = para.type === 'heading' ? 'para-heading' : 'para-body';
       wrapper.className = 'para ' + typeClass;
       wrapper.textContent = para.text;
