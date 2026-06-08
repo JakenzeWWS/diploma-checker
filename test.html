@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Tests</title></head>
+<body>
+<h2>DocxChecker Tests</h2>
+<pre id="out"></pre>
+<script src="lib/jszip.min.js"></script>
+<script src="checker.js"></script>
+<script>
+const out = document.getElementById('out');
+const results = [];
+
+function assert(desc, condition) {
+  results.push({ desc, pass: !!condition });
+}
+
+function run() {
+  // Task 2: basic structure
+  assert('DocxChecker exists', typeof DocxChecker === 'object');
+  assert('RULES.body.font is Times New Roman', DocxChecker.RULES.body.font === 'Times New Roman');
+  assert('RULES.body.sizePt is 14', DocxChecker.RULES.body.sizePt === 14);
+  assert('RULES.heading.sizePt is 20', DocxChecker.RULES.heading.sizePt === 20);
+  assert('RULES.margins.leftCm is 3', DocxChecker.RULES.margins.leftCm === 3.0);
+
+  const passed = results.filter(r => r.pass).length;
+  out.textContent = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.desc).join('\n');
+  out.textContent += `\n\n${passed}/${results.length} passed`;
+}
+
+run();
+</script>
+</body>
+</html>
