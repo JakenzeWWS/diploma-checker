@@ -180,10 +180,22 @@ const DocxChecker = (() => {
       }
 
       const text = els(pEl, 't').map(t => t.textContent).join('');
-      paragraphs.push({ styleId, paraOverride, runFormats, text });
+
+      // Detect explicit page breaks in this paragraph's runs
+      const hasPageBreakRun = els(pEl, 'br').some(br => attr(br, 'type') === 'page');
+      // Detect "always start on new page" paragraph property
+      const hasPageBreakBefore = pPr ? !!el(pPr, 'pageBreakBefore') : false;
+
+      paragraphs.push({ styleId, paraOverride, runFormats, text, hasPageBreakRun, hasPageBreakBefore });
     }
 
-    return paragraphs;
+    // Assign startsNewPage: true when this paragraph begins a new page.
+    // A page break run at the END of paragraph N means paragraph N+1 starts a new page.
+    return paragraphs.map((para, i) => {
+      const prevHadBreak = i > 0 && paragraphs[i - 1].hasPageBreakRun;
+      const startsNewPage = i === 0 || para.hasPageBreakBefore || prevHadBreak;
+      return { styleId: para.styleId, paraOverride: para.paraOverride, runFormats: para.runFormats, text: para.text, startsNewPage };
+    });
   }
   function resolveFormatting(paragraph, styleMap) {
     const normalStyle = styleMap.get('Normal') || {};
@@ -352,7 +364,9 @@ const DocxChecker = (() => {
 
     const marginErrors = checkMargins(margins);
 
+    let pageNum = 1;
     const paragraphResults = rawParagraphs.map((para, index) => {
+      if (para.startsNewPage && index > 0) pageNum++;
       const type   = classifyParagraph(para, styleMap);
       const errors = checkParagraph(para, type, styleMap);
       return {
@@ -361,6 +375,8 @@ const DocxChecker = (() => {
         type,
         errors,
         hasErrors: errors.length > 0,
+        pageNum,
+        startsNewPage: para.startsNewPage,
       };
     });
 

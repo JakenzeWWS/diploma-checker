@@ -11,6 +11,10 @@ function showUploadError(msg) {
   el.hidden = false;
 }
 
+// ── Stored results for re-render when skipPages changes ─
+let _lastResults  = null;
+let _lastFilename = '';
+
 // ── File processing pipeline ───────────────────────────
 async function processFile(file) {
   if (!file || !file.name.toLowerCase().endsWith('.docx')) {
@@ -24,29 +28,43 @@ async function processFile(file) {
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
 
-    if (!zip.file('word/document.xml') || !zip.file('word/styles.xml')) {
+    if (!zip.file('word/document.xml')) {
       throw new Error('Файл повреждён или не является корректным .docx документом.');
     }
 
     const results = await DocxChecker.checkDocument(zip);
+    _lastResults  = results;
+    _lastFilename = file.name;
+
     showState('results');
-    renderDocument(results, file.name);
+    renderDocument(results, file.name, getSkipPages());
   } catch (err) {
     showState('upload');
     showUploadError('Ошибка при анализе файла: ' + err.message);
   }
 }
 
+function getSkipPages() {
+  const input = document.getElementById('skip-pages');
+  return input ? Math.max(0, parseInt(input.value, 10) || 0) : 0;
+}
+
 // ── Document renderer ──────────────────────────────────
-function renderDocument(results, filename) {
+function renderDocument(results, filename, skipPages) {
+  skipPages = skipPages || 0;
+
   document.getElementById('summary-filename').textContent = filename;
 
+  // Count errors only outside skipped pages
+  const activeErrors = results.paragraphResults.filter(p => p.hasErrors && p.pageNum > skipPages).length;
+  const totalActive  = results.marginErrors.length + activeErrors;
+
   const errEl = document.getElementById('summary-errors');
-  if (results.totalErrors === 0) {
+  if (totalActive === 0) {
     errEl.textContent = 'Ошибок не найдено ✓';
     errEl.classList.add('no-errors');
   } else {
-    errEl.textContent = 'Ошибок: ' + results.totalErrors;
+    errEl.textContent = 'Ошибок: ' + totalActive;
     errEl.classList.remove('no-errors');
   }
 
@@ -65,21 +83,35 @@ function renderDocument(results, filename) {
     marginBanner.hidden = true;
   }
 
-  // Document view
+  // Group paragraphs by page number
+  const pages = [];
+  let lastPageNum = -1;
+  results.paragraphResults.forEach(para => {
+    if (para.pageNum !== lastPageNum) {
+      pages.push([]);
+      lastPageNum = para.pageNum;
+    }
+    pages[pages.length - 1].push(para);
+  });
+
   const docView = document.getElementById('document-view');
   docView.innerHTML = '';
 
-  const PAGE_SIZE = 40;
-  const allParas  = results.paragraphResults;
-  const pageCount = Math.max(1, Math.ceil(allParas.length / PAGE_SIZE));
+  pages.forEach(pageParagraphs => {
+    const pageNum   = pageParagraphs[0].pageNum;
+    const isSkipped = pageNum <= skipPages;
 
-  for (let p = 0; p < pageCount; p++) {
     const pageEl = document.createElement('div');
-    pageEl.className = 'page';
+    pageEl.className = 'page' + (isSkipped ? ' page-skipped' : '');
 
-    const slice = allParas.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
+    if (isSkipped) {
+      const notice = document.createElement('div');
+      notice.className = 'page-skip-notice';
+      notice.textContent = 'Страница ' + pageNum + ' — исключена из проверки (титульная/содержание)';
+      pageEl.appendChild(notice);
+    }
 
-    slice.forEach(para => {
+    pageParagraphs.forEach(para => {
       const wrapper = document.createElement('div');
 
       if (!para.text.trim()) {
@@ -92,7 +124,7 @@ function renderDocument(results, filename) {
       wrapper.className = 'para ' + typeClass;
       wrapper.textContent = para.text;
 
-      if (para.hasErrors) {
+      if (para.hasErrors && !isSkipped) {
         wrapper.classList.add('para-error');
         wrapper.appendChild(buildTooltip(para.errors));
       }
@@ -101,7 +133,7 @@ function renderDocument(results, filename) {
     });
 
     docView.appendChild(pageEl);
-  }
+  });
 }
 
 function buildTooltip(errors) {
@@ -132,9 +164,10 @@ function escHtml(str) {
 
 // ── Event listeners ────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  const fileInput = document.getElementById('file-input');
-  const dropZone  = document.getElementById('drop-zone');
-  const btnReset  = document.getElementById('btn-reset');
+  const fileInput  = document.getElementById('file-input');
+  const dropZone   = document.getElementById('drop-zone');
+  const btnReset   = document.getElementById('btn-reset');
+  const skipInput  = document.getElementById('skip-pages');
 
   fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) processFile(fileInput.files[0]);
@@ -160,6 +193,15 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.value = '';
     document.getElementById('upload-error').hidden = true;
     document.getElementById('document-view').innerHTML = '';
+    _lastResults  = null;
+    _lastFilename = '';
     showState('upload');
   });
+
+  // Re-render when skip-pages value changes (no re-parsing needed)
+  if (skipInput) {
+    skipInput.addEventListener('change', () => {
+      if (_lastResults) renderDocument(_lastResults, _lastFilename, getSkipPages());
+    });
+  }
 });

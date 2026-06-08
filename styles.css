@@ -134,6 +134,26 @@ body {
 
 #btn-reset:hover { background: rgba(255,255,255,0.15); }
 
+.skip-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+#skip-pages {
+  width: 52px;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 /* ── Margin Error Banner ──────────────────────────────── */
 
 #margin-banner {
@@ -238,3 +258,21 @@ body {
 .tooltip-values .current { color: #f87171; }
 .tooltip-values .required { color: #86efac; }
 .tooltip-rec { color: #94a3b8; font-style: italic; margin-top: 0.2rem; }
+
+/* ── Skipped Pages ────────────────────────────────────── */
+
+.page-skipped {
+  opacity: 0.45;
+  border: 2px dashed #94a3b8;
+  min-height: unset;
+}
+
+.page-skip-notice {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 0.8rem;
+  color: #64748b;
+  text-align: center;
+  padding: 0.5rem 0 1rem;
+  border-bottom: 1px dashed #cbd5e1;
+  margin-bottom: 1rem;
+}
