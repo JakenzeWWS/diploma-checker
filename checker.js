@@ -52,6 +52,7 @@ const DocxChecker = (() => {
 
   function parseStyles(xmlString) {
     const doc = parseXml(xmlString);
+    if (doc.documentElement.tagName === 'parsererror') return new Map();
     const styleMap = new Map();
 
     for (const styleEl of els(doc, 'style')) {

@@ -33,6 +33,7 @@ function run() {
     </w:rPr>
     <w:pPr>
       <w:jc w:val="both"/>
+      <w:ind w:firstLine="709"/>
       <w:spacing w:line="240" w:lineRule="auto"/>
     </w:pPr>
   </w:style>
@@ -60,6 +61,8 @@ function run() {
   assert('Heading1 normalizedName is heading 1', styleMap.get('Heading1').normalizedName === 'heading 1');
   assert('Heading1 sizePt is 20', styleMap.get('Heading1').sizePt === 20);
   assert('Heading1 bold is true', styleMap.get('Heading1').bold === true);
+  assert('Normal firstLineIndentCm ~1.25', Math.abs(styleMap.get('Normal').firstLineIndentCm - 1.25) < 0.05);
+  assert('Normal lineSpacingRule is auto', styleMap.get('Normal').lineSpacingRule === 'auto');
 
   const passed = results.filter(r => r.pass).length;
   out.textContent = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.desc).join('\n');
