@@ -199,6 +199,7 @@ const DocxChecker = (() => {
       bold:   runBolds[0]  ?? paraStyle.bold  ?? normalStyle.bold  ?? false,
       allFonts: [...new Set(runFonts)],
       allSizes: [...new Set(runSizes)],
+      allBolds: [...new Set(runBolds)],
 
       alignment: paragraph.paraOverride.alignment
                  ?? paraStyle.alignment
@@ -238,12 +239,19 @@ const DocxChecker = (() => {
     const rules = RULES[type];
     const errors = [];
 
-    // Font — flag any run with wrong font
+    // Font — check run-level overrides; fall back to resolved inherited font
     const badFonts = fmt.allFonts.filter(f => f !== rules.font);
     if (badFonts.length > 0) {
       errors.push({
         param: 'Шрифт',
         current: [...new Set(badFonts)].join(', '),
+        required: rules.font,
+        recommendation: `Выделите текст и смените шрифт на «${rules.font}».`,
+      });
+    } else if (fmt.allFonts.length === 0 && fmt.font !== null && fmt.font !== rules.font) {
+      errors.push({
+        param: 'Шрифт',
+        current: fmt.font,
         required: rules.font,
         recommendation: `Выделите текст и смените шрифт на «${rules.font}».`,
       });
@@ -260,8 +268,8 @@ const DocxChecker = (() => {
       });
     }
 
-    // Bold — body text must not be bold
-    if (type === 'body' && fmt.bold === true) {
+    // Bold — body text must not be bold (check all runs)
+    if (type === 'body' && fmt.allBolds.includes(true)) {
       errors.push({
         param: 'Жирный шрифт',
         current: 'Да',
@@ -325,19 +333,20 @@ const DocxChecker = (() => {
     ];
 
     return checks
-      .filter(({ key, required }) => Math.abs(margins[key] - required) > tol)
+      .filter(({ key, required }) => margins[key] === null || Math.abs(margins[key] - required) > tol)
       .map(({ label, key, required }) => ({
         param: label,
-        current: margins[key].toFixed(2) + ' см',
+        current: margins[key] !== null ? margins[key].toFixed(2) + ' см' : 'не определено',
         required: required.toFixed(1) + ' см',
         recommendation: `Установите ${label.toLowerCase()} ${required} см в настройках полей документа.`,
       }));
   }
   async function checkDocument(zip) {
     const docXml    = await zip.file('word/document.xml').async('string');
-    const stylesXml = await zip.file('word/styles.xml').async('string');
-
-    const styleMap = parseStyles(stylesXml);
+    const stylesFile = zip.file('word/styles.xml');
+    const styleMap  = stylesFile
+      ? parseStyles(await stylesFile.async('string'))
+      : new Map();
     const margins  = parseMargins(docXml);
     const rawParagraphs = parseParagraphs(docXml);
 
