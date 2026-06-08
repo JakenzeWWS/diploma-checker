@@ -64,6 +64,62 @@ function run() {
   assert('Normal firstLineIndentCm ~1.25', Math.abs(styleMap.get('Normal').firstLineIndentCm - 1.25) < 0.05);
   assert('Normal lineSpacingRule is auto', styleMap.get('Normal').lineSpacingRule === 'auto');
 
+  // Task 4: parseMargins and parseParagraphs
+  const FAKE_DOC_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Normal"/>
+        <w:jc w:val="both"/>
+        <w:spacing w:line="240" w:lineRule="auto"/>
+        <w:ind w:firstLine="709"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="Times New Roman"/>
+          <w:sz w:val="28"/>
+        </w:rPr>
+        <w:t>Основной текст диплома.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:sz w:val="40"/>
+          <w:b/>
+        </w:rPr>
+        <w:t>ВВЕДЕНИЕ</w:t>
+      </w:r>
+    </w:p>
+    <w:sectPr>
+      <w:pgMar w:left="1701" w:right="567" w:top="1134" w:bottom="1134"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+  const margins = DocxChecker.parseMargins(FAKE_DOC_XML);
+  assert('parseMargins returns object', margins !== null);
+  assert('left margin ~3.0 cm', Math.abs(margins.leftCm - 3.0) < 0.05);
+  assert('right margin ~1.0 cm', Math.abs(margins.rightCm - 1.0) < 0.05);
+  assert('top margin ~2.0 cm', Math.abs(margins.topCm - 2.0) < 0.05);
+  assert('bottom margin ~2.0 cm', Math.abs(margins.bottomCm - 2.0) < 0.05);
+
+  const paras = DocxChecker.parseParagraphs(FAKE_DOC_XML);
+  assert('parseParagraphs returns 2 paragraphs', paras.length === 2);
+  assert('first para styleId is Normal', paras[0].styleId === 'Normal');
+  assert('first para text contains текст', paras[0].text.includes('текст'));
+  assert('first para alignment override is both', paras[0].paraOverride.alignment === 'both');
+  assert('first para indent ~1.25 cm', Math.abs(paras[0].paraOverride.firstLineIndentCm - 1.25) < 0.05);
+  assert('first para run font is Times New Roman', paras[0].runFormats[0].font === 'Times New Roman');
+  assert('first para run sizePt is 14', paras[0].runFormats[0].sizePt === 14);
+  assert('second para styleId is Heading1', paras[1].styleId === 'Heading1');
+  assert('second para text is ВВЕДЕНИЕ', paras[1].text === 'ВВЕДЕНИЕ');
+  assert('second para run bold is true', paras[1].runFormats[0].bold === true);
+
   const passed = results.filter(r => r.pass).length;
   out.textContent = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.desc).join('\n');
   out.textContent += `\n\n${passed}/${results.length} passed`;

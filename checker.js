@@ -109,8 +109,82 @@ const DocxChecker = (() => {
 
     return styleMap;
   }
-  function parseMargins(xmlString) { return null; }
-  function parseParagraphs(xmlString) { return []; }
+  function parseMargins(xmlString) {
+    const doc = parseXml(xmlString);
+    if (doc.documentElement.tagName === 'parsererror') return null;
+    const pgMar = el(doc, 'pgMar');
+    if (!pgMar) return null;
+
+    return {
+      leftCm:   twipsToCm(attr(pgMar, 'left')),
+      rightCm:  twipsToCm(attr(pgMar, 'right')),
+      topCm:    twipsToCm(attr(pgMar, 'top')),
+      bottomCm: twipsToCm(attr(pgMar, 'bottom')),
+    };
+  }
+  function parseParagraphs(xmlString) {
+    const doc = parseXml(xmlString);
+    if (doc.documentElement.tagName === 'parsererror') return [];
+    const paragraphs = [];
+
+    for (const pEl of els(doc, 'p')) {
+      const pPr = el(pEl, 'pPr');
+
+      let styleId = 'Normal';
+      if (pPr) {
+        const pStyle = el(pPr, 'pStyle');
+        if (pStyle) styleId = attr(pStyle, 'val') || 'Normal';
+      }
+
+      const paraOverride = {};
+      if (pPr) {
+        const jc = el(pPr, 'jc');
+        if (jc) paraOverride.alignment = attr(jc, 'val');
+
+        const ind = el(pPr, 'ind');
+        if (ind) {
+          const fl = attr(ind, 'firstLine');
+          if (fl !== null) paraOverride.firstLineIndentCm = twipsToCm(fl);
+        }
+
+        const spacing = el(pPr, 'spacing');
+        if (spacing) {
+          const line = attr(spacing, 'line');
+          const lineRule = attr(spacing, 'lineRule');
+          if (line) paraOverride.lineSpacingTwips = parseInt(line, 10);
+          if (lineRule) paraOverride.lineSpacingRule = lineRule;
+        }
+      }
+
+      const runFormats = [];
+      for (const rEl of els(pEl, 'r')) {
+        const rPr = el(rEl, 'rPr');
+        const runFmt = {};
+        if (rPr) {
+          const fonts = el(rPr, 'rFonts');
+          if (fonts) runFmt.font = attr(fonts, 'ascii') || attr(fonts, 'hAnsi') || null;
+
+          const sz = el(rPr, 'sz');
+          if (sz) {
+            const val = attr(sz, 'val');
+            if (val) runFmt.sizePt = parseInt(val, 10) / 2;
+          }
+
+          const bEl = el(rPr, 'b');
+          if (bEl) {
+            const val = attr(bEl, 'val');
+            runFmt.bold = val === null || (val !== '0' && val !== 'false' && val !== 'off');
+          }
+        }
+        runFormats.push(runFmt);
+      }
+
+      const text = els(pEl, 't').map(t => t.textContent).join('');
+      paragraphs.push({ styleId, paraOverride, runFormats, text });
+    }
+
+    return paragraphs;
+  }
   function resolveFormatting(paragraph, styleMap) { return {}; }
   function classifyParagraph(paragraph, styleMap) { return 'body'; }
   function checkParagraph(paragraph, type, styleMap) { return []; }
