@@ -19,8 +19,9 @@ function run() {
   assert('DocxChecker exists', typeof DocxChecker === 'object');
   assert('RULES.body.font is Times New Roman', DocxChecker.RULES.body.font === 'Times New Roman');
   assert('RULES.body.sizePt is 14', DocxChecker.RULES.body.sizePt === 14);
-  assert('RULES.heading.sizePt is 20', DocxChecker.RULES.heading.sizePt === 20);
+  assert('RULES.heading.sizePt is 20.5', DocxChecker.RULES.heading.sizePt === 20.5);
   assert('RULES.margins.leftCm is 3', DocxChecker.RULES.margins.leftCm === 3.0);
+  assert('RULES.body.firstLineIndentCm is 0.635', Math.abs(DocxChecker.RULES.body.firstLineIndentCm - 0.635) < 0.001);
 
   // Task 3: parseStyles
   const FAKE_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -33,7 +34,7 @@ function run() {
     </w:rPr>
     <w:pPr>
       <w:jc w:val="both"/>
-      <w:ind w:firstLine="709"/>
+      <w:ind w:firstLine="360"/>
       <w:spacing w:line="240" w:lineRule="auto"/>
     </w:pPr>
   </w:style>
@@ -41,7 +42,7 @@ function run() {
     <w:name w:val="heading 1"/>
     <w:rPr>
       <w:rFonts w:ascii="Times New Roman"/>
-      <w:sz w:val="40"/>
+      <w:sz w:val="41"/>
       <w:b/>
     </w:rPr>
     <w:pPr>
@@ -59,9 +60,9 @@ function run() {
   assert('Normal lineSpacingTwips is 240', styleMap.get('Normal').lineSpacingTwips === 240);
   assert('Heading1 exists', styleMap.has('Heading1'));
   assert('Heading1 normalizedName is heading 1', styleMap.get('Heading1').normalizedName === 'heading 1');
-  assert('Heading1 sizePt is 20', styleMap.get('Heading1').sizePt === 20);
+  assert('Heading1 sizePt is 20.5', styleMap.get('Heading1').sizePt === 20.5);
   assert('Heading1 bold is true', styleMap.get('Heading1').bold === true);
-  assert('Normal firstLineIndentCm ~1.25', Math.abs(styleMap.get('Normal').firstLineIndentCm - 1.25) < 0.05);
+  assert('Normal firstLineIndentCm ~0.635', Math.abs(styleMap.get('Normal').firstLineIndentCm - 0.635) < 0.05);
   assert('Normal lineSpacingRule is auto', styleMap.get('Normal').lineSpacingRule === 'auto');
 
   // Task 4: parseMargins and parseParagraphs
@@ -73,7 +74,7 @@ function run() {
         <w:pStyle w:val="Normal"/>
         <w:jc w:val="both"/>
         <w:spacing w:line="240" w:lineRule="auto"/>
-        <w:ind w:firstLine="709"/>
+        <w:ind w:firstLine="360"/>
       </w:pPr>
       <w:r>
         <w:rPr>
@@ -89,7 +90,7 @@ function run() {
       </w:pPr>
       <w:r>
         <w:rPr>
-          <w:sz w:val="40"/>
+          <w:sz w:val="41"/>
           <w:b/>
         </w:rPr>
         <w:t>ВВЕДЕНИЕ</w:t>
@@ -113,7 +114,7 @@ function run() {
   assert('first para styleId is Normal', paras[0].styleId === 'Normal');
   assert('first para text contains текст', paras[0].text.includes('текст'));
   assert('first para alignment override is both', paras[0].paraOverride.alignment === 'both');
-  assert('first para indent ~1.25 cm', Math.abs(paras[0].paraOverride.firstLineIndentCm - 1.25) < 0.05);
+  assert('first para indent ~0.635 cm', Math.abs(paras[0].paraOverride.firstLineIndentCm - 0.635) < 0.05);
   assert('first para run font is Times New Roman', paras[0].runFormats[0].font === 'Times New Roman');
   assert('first para run sizePt is 14', paras[0].runFormats[0].sizePt === 14);
   assert('second para styleId is Heading1', paras[1].styleId === 'Heading1');
@@ -127,12 +128,12 @@ function run() {
   assert('resolveFormatting: sizePt is 14', fmt0.sizePt === 14);
   assert('resolveFormatting: bold is false', fmt0.bold === false);
   assert('resolveFormatting: alignment is both', fmt0.alignment === 'both');
-  assert('resolveFormatting: indent ~1.25 cm', Math.abs(fmt0.firstLineIndentCm - 1.25) < 0.05);
+  assert('resolveFormatting: indent ~0.635 cm', Math.abs(fmt0.firstLineIndentCm - 0.635) < 0.05);
   assert('resolveFormatting: lineSpacingTwips is 240', fmt0.lineSpacingTwips === 240);
   assert('resolveFormatting: allFonts has one entry', fmt0.allFonts.length === 1);
 
   const fmt1 = DocxChecker.resolveFormatting(paras[1], styleMap);
-  assert('resolveFormatting heading: sizePt is 20', fmt1.sizePt === 20);
+  assert('resolveFormatting heading: sizePt is 20.5', fmt1.sizePt === 20.5);
   assert('resolveFormatting heading: bold is true', fmt1.bold === true);
 
   assert('classifyParagraph: Normal para is body', DocxChecker.classifyParagraph(paras[0], styleMap) === 'body');
@@ -163,7 +164,7 @@ function run() {
   // Wrong font
   const wrongFontPara = {
     styleId: 'Normal', text: 'Текст с неверным шрифтом.',
-    paraOverride: { alignment: 'both', firstLineIndentCm: 1.25, lineSpacingTwips: 240, lineSpacingRule: 'auto' },
+    paraOverride: { alignment: 'both', firstLineIndentCm: 0.635, lineSpacingTwips: 240, lineSpacingRule: 'auto' },
     runFormats: [{ font: 'Arial', sizePt: 14, bold: false }],
   };
   const wrongFontErrors = DocxChecker.checkParagraph(wrongFontPara, 'body', styleMap);
@@ -173,7 +174,7 @@ function run() {
   // Wrong size
   const wrongSizePara = {
     styleId: 'Normal', text: 'Текст с неверным размером.',
-    paraOverride: { alignment: 'both', firstLineIndentCm: 1.25, lineSpacingTwips: 240, lineSpacingRule: 'auto' },
+    paraOverride: { alignment: 'both', firstLineIndentCm: 0.635, lineSpacingTwips: 240, lineSpacingRule: 'auto' },
     runFormats: [{ font: 'Times New Roman', sizePt: 12 }],
   };
   const wrongSizeErrors = DocxChecker.checkParagraph(wrongSizePara, 'body', styleMap);

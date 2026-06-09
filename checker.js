@@ -11,13 +11,13 @@ const DocxChecker = (() => {
       sizePt: 14,
       bold: false,
       alignment: 'both',
-      firstLineIndentCm: 1.25,
+      firstLineIndentCm: 0.635,   // 360 twips from template
       lineSpacingTwips: 240,
       lineSpacingRule: 'auto',
     },
     heading: {
       font: 'Times New Roman',
-      sizePt: 20,
+      sizePt: 20.5,               // 41 half-points (Heading3) from template
       bold: true,
       alignment: 'left',
       firstLineIndentCm: 0,
@@ -339,7 +339,7 @@ const DocxChecker = (() => {
     }
 
     const fmt = resolveFormatting(paragraph, styleMap);
-    if (fmt.bold === true && fmt.sizePt === 20) return 'heading';
+    if (fmt.bold === true && fmt.sizePt >= 20) return 'heading';
 
     return 'body';
   }
