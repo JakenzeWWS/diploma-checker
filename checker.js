@@ -187,11 +187,37 @@ const DocxChecker = (() => {
 
     const text = els(pEl, 't').map(t => t.textContent).join('');
     const hasPageBreakRun = els(pEl, 'br').some(br => attr(br, 'type') === 'page');
-    const hasLastRenderedBreak = els(pEl, 'lastRenderedPageBreak').length > 0;
     const hasPageBreakBefore = pPr ? !!el(pPr, 'pageBreakBefore') : false;
 
+    // Detect lastRenderedPageBreak position relative to visible text.
+    // LRPB before text → this paragraph is the first element on a new page.
+    // LRPB after text  → paragraph spans a page break; the NEXT paragraph
+    //                    starts the new page (treat like a trailing soft break).
+    let lrpbBeforeText = false;
+    let lrpbAfterText  = false;
+    let _seenText = false;
+    (function walkLrpb(node) {
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType !== 1) continue;
+        if (child.namespaceURI === W) {
+          if (child.localName === 'lastRenderedPageBreak') {
+            if (_seenText) lrpbAfterText = true;
+            else lrpbBeforeText = true;
+          } else if (child.localName === 't') {
+            if ((child.textContent || '').trim()) _seenText = true;
+          } else {
+            walkLrpb(child);
+          }
+        } else {
+          walkLrpb(child);
+        }
+      }
+    }(pEl));
+
     return { styleId, paraOverride, runFormats, text, imageRels,
-      hasPageBreakRun, hasLastRenderedBreak, hasPageBreakBefore };
+      hasPageBreakRun, hasPageBreakBefore,
+      hasLastRenderedBreak: lrpbBeforeText,
+      hasLrpbAfterText:     lrpbAfterText };
   }
 
   // Parse a <w:tbl>: only direct <w:p> children of each <w:tc> (no nested tables)
@@ -244,7 +270,8 @@ const DocxChecker = (() => {
           || block.hasLastRenderedBreak
           || prevHadHardBreak;
         isFirst = false;
-        prevHadHardBreak = block.hasPageBreakRun;
+        // LRPB after text means this paragraph ended a page — next block starts a new page
+        prevHadHardBreak = block.hasPageBreakRun || block.hasLrpbAfterText;
       } else {
         block.startsNewPage = false;
         // preserve prevHadHardBreak across tables
