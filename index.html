@@ -8,50 +8,72 @@
 </head>
 <body>
 
-  <!-- STATE 1: Upload -->
-  <div id="state-upload">
-    <div class="upload-container">
-      <h1>Проверка оформления дипломной работы</h1>
-      <p class="subtitle">Загрузите файл .docx — приложение проверит шрифт, поля, отступы и межстрочный интервал.</p>
-      <label id="drop-zone" for="file-input">
-        <div class="drop-icon">&#128196;</div>
-        <div class="drop-primary">Перетащите файл сюда</div>
-        <div class="drop-secondary">или нажмите для выбора</div>
-        <div class="drop-hint">Принимается только .docx</div>
-      </label>
-      <input type="file" id="file-input" accept=".docx" />
-      <p id="upload-error" class="upload-error" hidden></p>
-    </div>
-  </div>
+  <!-- Tab navigation (always visible) -->
+  <nav id="tab-bar">
+    <button id="tab-checker" class="tab-btn tab-active">Проверка оформления</button>
+    <button id="tab-template" class="tab-btn">Шаблон бланк</button>
+  </nav>
 
-  <!-- STATE 2: Loading -->
-  <div id="state-loading" hidden>
-    <div class="loading-container">
-      <div class="spinner"></div>
-      <p>Анализируем файл...</p>
-    </div>
-  </div>
+  <!-- ── SECTION: Checker ─────────────────────────────── -->
+  <div id="section-checker">
 
-  <!-- STATE 3: Results -->
-  <div id="state-results" hidden>
-    <div id="summary-bar">
-      <span id="summary-filename"></span>
-      <span id="summary-errors"></span>
-      <label class="skip-label">
-        Пропустить страниц:
-        <input id="skip-pages" type="number" value="2" min="0" max="20" />
-      </label>
-      <button id="btn-reset">Проверить другой файл</button>
+    <!-- STATE 1: Upload -->
+    <div id="state-upload">
+      <div class="upload-container">
+        <h1>Проверка оформления дипломной работы</h1>
+        <p class="subtitle">Загрузите файл .docx — приложение проверит шрифт, поля, отступы и межстрочный интервал.</p>
+        <label id="drop-zone" for="file-input">
+          <div class="drop-icon">&#128196;</div>
+          <div class="drop-primary">Перетащите файл сюда</div>
+          <div class="drop-secondary">или нажмите для выбора</div>
+          <div class="drop-hint">Принимается только .docx</div>
+        </label>
+        <input type="file" id="file-input" accept=".docx" />
+        <p id="upload-error" class="upload-error" hidden></p>
+      </div>
     </div>
-    <div id="margin-banner" hidden>
-      <strong>Поля страницы:</strong>
-      <ul id="margin-error-list"></ul>
+
+    <!-- STATE 2: Loading -->
+    <div id="state-loading" hidden>
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <p>Анализируем файл...</p>
+      </div>
     </div>
-    <div id="document-view"></div>
+
+    <!-- STATE 3: Results -->
+    <div id="state-results" hidden>
+      <div id="summary-bar">
+        <span id="summary-filename"></span>
+        <span id="summary-errors"></span>
+        <label class="skip-label">
+          Пропустить страниц:
+          <input id="skip-pages" type="number" value="2" min="0" max="20" />
+        </label>
+        <button id="btn-reset">Проверить другой файл</button>
+      </div>
+      <div id="margin-banner" hidden>
+        <strong>Поля страницы:</strong>
+        <ul id="margin-error-list"></ul>
+      </div>
+      <div id="document-view"></div>
+    </div>
+
+  </div><!-- /section-checker -->
+
+  <!-- ── SECTION: Template ────────────────────────────── -->
+  <div id="section-template" hidden>
+    <div id="template-bar">
+      <span class="tpl-bar-title">Бланк дипломной работы</span>
+      <span class="tpl-bar-hint">Заполните поля, затем распечатайте</span>
+      <button id="btn-print">Печать / сохранить PDF</button>
+    </div>
+    <div id="template-view"></div>
   </div>
 
   <script src="lib/jszip.min.js"></script>
   <script src="checker.js"></script>
   <script src="app.js"></script>
+  <script src="template-page.js"></script>
 </body>
 </html>

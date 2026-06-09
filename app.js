@@ -204,11 +204,27 @@ function escHtml(str) {
 }
 
 // ── Event listeners ────────────────────────────────────
+// ── Tab switching ──────────────────────────────────────
+function showSection(name) {
+  document.getElementById('section-checker').hidden  = name !== 'checker';
+  document.getElementById('section-template').hidden = name !== 'template';
+  document.getElementById('tab-checker').classList.toggle('tab-active',  name === 'checker');
+  document.getElementById('tab-template').classList.toggle('tab-active', name === 'template');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const fileInput  = document.getElementById('file-input');
   const dropZone   = document.getElementById('drop-zone');
   const btnReset   = document.getElementById('btn-reset');
   const skipInput  = document.getElementById('skip-pages');
+
+  document.getElementById('tab-checker').addEventListener('click', () => showSection('checker'));
+  document.getElementById('tab-template').addEventListener('click', () => {
+    showSection('template');
+    TemplatePage.loadAndRender();
+  });
+
+  TemplatePage.init();
 
   fileInput.addEventListener('change', () => {
     if (fileInput.files[0]) processFile(fileInput.files[0]);
