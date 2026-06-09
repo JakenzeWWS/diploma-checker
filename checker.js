@@ -1,5 +1,8 @@
 const DocxChecker = (() => {
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const PKG_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
   const CM_PER_TWIP = 2.54 / 1440;
 
   const RULES = {
@@ -61,15 +64,12 @@ const DocxChecker = (() => {
 
       const nameEl = el(styleEl, 'name');
       const normalizedName = (attr(nameEl, 'val') || '').toLowerCase();
-
       const entry = { normalizedName };
 
       const rPr = el(styleEl, 'rPr');
       if (rPr) {
         const fonts = el(rPr, 'rFonts');
-        if (fonts) {
-          entry.font = attr(fonts, 'ascii') || attr(fonts, 'hAnsi') || null;
-        }
+        if (fonts) entry.font = attr(fonts, 'ascii') || attr(fonts, 'hAnsi') || null;
 
         const sz = el(rPr, 'sz');
         if (sz) {
@@ -109,6 +109,7 @@ const DocxChecker = (() => {
 
     return styleMap;
   }
+
   function parseMargins(xmlString) {
     const doc = parseXml(xmlString);
     if (doc.documentElement.tagName === 'parsererror') return null;
@@ -122,104 +123,151 @@ const DocxChecker = (() => {
       bottomCm: twipsToCm(attr(pgMar, 'bottom')),
     };
   }
-  function isInTable(pEl) {
-    let node = pEl.parentNode;
-    while (node) {
-      if (node.localName === 'tc') return true;
-      if (node.localName === 'body') return false;
-      node = node.parentNode;
+
+  // Parse a single <w:p> element into raw paragraph data
+  function parseParagraphEl(pEl) {
+    const pPr = el(pEl, 'pPr');
+
+    let styleId = 'Normal';
+    if (pPr) {
+      const pStyle = el(pPr, 'pStyle');
+      if (pStyle) styleId = attr(pStyle, 'val') || 'Normal';
     }
-    return false;
+
+    const paraOverride = {};
+    if (pPr) {
+      const jc = el(pPr, 'jc');
+      if (jc) paraOverride.alignment = attr(jc, 'val');
+
+      const ind = el(pPr, 'ind');
+      if (ind) {
+        const fl = attr(ind, 'firstLine');
+        if (fl !== null) paraOverride.firstLineIndentCm = twipsToCm(fl);
+      }
+
+      const spacing = el(pPr, 'spacing');
+      if (spacing) {
+        const line = attr(spacing, 'line');
+        const lineRule = attr(spacing, 'lineRule');
+        if (line) paraOverride.lineSpacingTwips = parseInt(line, 10);
+        if (lineRule) paraOverride.lineSpacingRule = lineRule;
+      }
+    }
+
+    const runFormats = [];
+    const imageRels = [];
+
+    for (const rEl of els(pEl, 'r')) {
+      const rPr = el(rEl, 'rPr');
+      const runFmt = {};
+      if (rPr) {
+        const fonts = el(rPr, 'rFonts');
+        if (fonts) runFmt.font = attr(fonts, 'ascii') || attr(fonts, 'hAnsi') || null;
+
+        const sz = el(rPr, 'sz');
+        if (sz) {
+          const val = attr(sz, 'val');
+          if (val) runFmt.sizePt = parseInt(val, 10) / 2;
+        }
+
+        const bEl = el(rPr, 'b');
+        if (bEl) {
+          const val = attr(bEl, 'val');
+          runFmt.bold = val === null || (val !== '0' && val !== 'false' && val !== 'off');
+        }
+      }
+      runFormats.push(runFmt);
+
+      // Detect inline images: find <a:blip r:embed="rId..."/> inside this run
+      for (const blip of Array.from(rEl.getElementsByTagNameNS(A_NS, 'blip'))) {
+        const rEmbed = blip.getAttributeNS(R_NS, 'embed');
+        if (rEmbed) imageRels.push(rEmbed);
+      }
+    }
+
+    const text = els(pEl, 't').map(t => t.textContent).join('');
+    const hasPageBreakRun = els(pEl, 'br').some(br => attr(br, 'type') === 'page');
+    const hasLastRenderedBreak = els(pEl, 'lastRenderedPageBreak').length > 0;
+    const hasPageBreakBefore = pPr ? !!el(pPr, 'pageBreakBefore') : false;
+
+    return { styleId, paraOverride, runFormats, text, imageRels,
+      hasPageBreakRun, hasLastRenderedBreak, hasPageBreakBefore };
   }
 
-  function parseParagraphs(xmlString) {
+  // Parse a <w:tbl>: only direct <w:p> children of each <w:tc> (no nested tables)
+  function parseTableEl(tblEl) {
+    const rows = [];
+    for (const trEl of Array.from(tblEl.children)) {
+      if (trEl.localName !== 'tr') continue;
+      const cells = [];
+      for (const tcEl of Array.from(trEl.children)) {
+        if (tcEl.localName !== 'tc') continue;
+        const paragraphs = [];
+        for (const child of Array.from(tcEl.children)) {
+          if (child.localName === 'p') paragraphs.push(parseParagraphEl(child));
+        }
+        cells.push({
+          paragraphs,
+          text: paragraphs.map(p => p.text).join('\n').trim(),
+        });
+      }
+      if (cells.length > 0) rows.push({ cells });
+    }
+    return { rows };
+  }
+
+  // Iterate direct <w:body> children to produce ordered blocks (paragraphs + tables)
+  function parseBodyBlocks(xmlString) {
     const doc = parseXml(xmlString);
     if (doc.documentElement.tagName === 'parsererror') return [];
-    const paragraphs = [];
 
-    for (const pEl of els(doc, 'p')) {
-      const inTable = isInTable(pEl);
-      const pPr = el(pEl, 'pPr');
+    const body = doc.getElementsByTagNameNS(W, 'body')[0];
+    if (!body) return [];
 
-      let styleId = 'Normal';
-      if (pPr) {
-        const pStyle = el(pPr, 'pStyle');
-        if (pStyle) styleId = attr(pStyle, 'val') || 'Normal';
+    const blocks = [];
+    for (const child of Array.from(body.children)) {
+      if (child.localName === 'p') {
+        blocks.push({ kind: 'p', ...parseParagraphEl(child) });
+      } else if (child.localName === 'tbl') {
+        blocks.push({ kind: 'tbl', ...parseTableEl(child) });
       }
-
-      const paraOverride = {};
-      if (pPr) {
-        const jc = el(pPr, 'jc');
-        if (jc) paraOverride.alignment = attr(jc, 'val');
-
-        const ind = el(pPr, 'ind');
-        if (ind) {
-          const fl = attr(ind, 'firstLine');
-          if (fl !== null) paraOverride.firstLineIndentCm = twipsToCm(fl);
-        }
-
-        const spacing = el(pPr, 'spacing');
-        if (spacing) {
-          const line = attr(spacing, 'line');
-          const lineRule = attr(spacing, 'lineRule');
-          if (line) paraOverride.lineSpacingTwips = parseInt(line, 10);
-          if (lineRule) paraOverride.lineSpacingRule = lineRule;
-        }
-      }
-
-      const runFormats = [];
-      for (const rEl of els(pEl, 'r')) {
-        const rPr = el(rEl, 'rPr');
-        const runFmt = {};
-        if (rPr) {
-          const fonts = el(rPr, 'rFonts');
-          if (fonts) runFmt.font = attr(fonts, 'ascii') || attr(fonts, 'hAnsi') || null;
-
-          const sz = el(rPr, 'sz');
-          if (sz) {
-            const val = attr(sz, 'val');
-            if (val) runFmt.sizePt = parseInt(val, 10) / 2;
-          }
-
-          const bEl = el(rPr, 'b');
-          if (bEl) {
-            const val = attr(bEl, 'val');
-            runFmt.bold = val === null || (val !== '0' && val !== 'false' && val !== 'off');
-          }
-        }
-        runFormats.push(runFmt);
-      }
-
-      const text = els(pEl, 't').map(t => t.textContent).join('');
-
-      // Hard page break inside a run
-      const hasPageBreakRun = els(pEl, 'br').some(br => attr(br, 'type') === 'page');
-      // Soft page break — Word saves this when it auto-paginates on save
-      const hasLastRenderedBreak = els(pEl, 'lastRenderedPageBreak').length > 0;
-      // "Always start on new page" paragraph property
-      const hasPageBreakBefore = pPr ? !!el(pPr, 'pageBreakBefore') : false;
-
-      paragraphs.push({ styleId, paraOverride, runFormats, text,
-        hasPageBreakRun, hasLastRenderedBreak, hasPageBreakBefore, inTable });
+      // sectPr and other elements are skipped
     }
 
-    return paragraphs.map((para, i) => {
-      // Previous paragraph ended with a hard break → this one starts a new page
-      const prevHadBreak = i > 0 && paragraphs[i - 1].hasPageBreakRun;
-      const startsNewPage = i === 0
-        || para.hasPageBreakBefore
-        || para.hasLastRenderedBreak
-        || prevHadBreak;
-      return {
-        styleId: para.styleId,
-        paraOverride: para.paraOverride,
-        runFormats: para.runFormats,
-        text: para.text,
-        startsNewPage,
-        inTable: para.inTable,
-      };
-    });
+    // Assign startsNewPage to each paragraph block
+    let isFirst = true;
+    let prevHadHardBreak = false;
+    for (const block of blocks) {
+      if (block.kind === 'p') {
+        block.startsNewPage = isFirst
+          || block.hasPageBreakBefore
+          || block.hasLastRenderedBreak
+          || prevHadHardBreak;
+        isFirst = false;
+        prevHadHardBreak = block.hasPageBreakRun;
+      } else {
+        block.startsNewPage = false;
+        // preserve prevHadHardBreak across tables
+      }
+    }
+
+    return blocks;
   }
+
+  // Backward-compatible wrapper — keeps tests passing
+  function parseParagraphs(xmlString) {
+    return parseBodyBlocks(xmlString)
+      .filter(b => b.kind === 'p')
+      .map(b => ({
+        styleId: b.styleId,
+        paraOverride: b.paraOverride,
+        runFormats: b.runFormats,
+        text: b.text,
+        startsNewPage: b.startsNewPage,
+        inTable: false,
+      }));
+  }
+
   function resolveFormatting(paragraph, styleMap) {
     const normalStyle = styleMap.get('Normal') || {};
     const paraStyle = styleMap.get(paragraph.styleId) || {};
@@ -254,6 +302,7 @@ const DocxChecker = (() => {
                        ?? null,
     };
   }
+
   function classifyParagraph(paragraph, styleMap) {
     const styleEntry = styleMap.get(paragraph.styleId) || {};
     const normalizedName = styleEntry.normalizedName || '';
@@ -267,6 +316,7 @@ const DocxChecker = (() => {
 
     return 'body';
   }
+
   function checkParagraph(paragraph, type, styleMap) {
     if (!paragraph.text.trim()) return [];
 
@@ -274,7 +324,6 @@ const DocxChecker = (() => {
     const rules = RULES[type];
     const errors = [];
 
-    // Font — check run-level overrides; fall back to resolved inherited font
     const badFonts = fmt.allFonts.filter(f => f !== rules.font);
     if (badFonts.length > 0) {
       errors.push({
@@ -292,7 +341,6 @@ const DocxChecker = (() => {
       });
     }
 
-    // Size — flag any run with wrong size
     const badSizes = fmt.allSizes.filter(s => s !== rules.sizePt);
     if (badSizes.length > 0) {
       errors.push({
@@ -303,7 +351,6 @@ const DocxChecker = (() => {
       });
     }
 
-    // Bold — body text must not be bold (check all runs)
     if (type === 'body' && fmt.allBolds.includes(true)) {
       errors.push({
         param: 'Жирный шрифт',
@@ -313,7 +360,6 @@ const DocxChecker = (() => {
       });
     }
 
-    // Alignment
     const alignment = fmt.alignment || 'left';
     if (alignment !== rules.alignment) {
       const labels = { both: 'По ширине', left: 'По левому краю', center: 'По центру', right: 'По правому краю' };
@@ -325,7 +371,6 @@ const DocxChecker = (() => {
       });
     }
 
-    // First line indent
     const indent = fmt.firstLineIndentCm ?? 0;
     if (Math.abs(indent - rules.firstLineIndentCm) > 0.05) {
       errors.push({
@@ -336,7 +381,6 @@ const DocxChecker = (() => {
       });
     }
 
-    // Line spacing (body only)
     if (type === 'body') {
       const spacingOk =
         fmt.lineSpacingTwips === rules.lineSpacingTwips &&
@@ -356,6 +400,7 @@ const DocxChecker = (() => {
 
     return errors;
   }
+
   function checkMargins(margins) {
     if (!margins) return [];
 
@@ -376,42 +421,83 @@ const DocxChecker = (() => {
         recommendation: `Установите ${label.toLowerCase()} ${required} см в настройках полей документа.`,
       }));
   }
+
   async function checkDocument(zip) {
-    const docXml    = await zip.file('word/document.xml').async('string');
+    const docXml = await zip.file('word/document.xml').async('string');
     const stylesFile = zip.file('word/styles.xml');
-    const styleMap  = stylesFile
+    const styleMap = stylesFile
       ? parseStyles(await stylesFile.async('string'))
       : new Map();
-    const margins  = parseMargins(docXml);
-    const rawParagraphs = parseParagraphs(docXml);
 
+    const margins = parseMargins(docXml);
     const marginErrors = checkMargins(margins);
 
+    // Build relationship id → image target path map
+    const relMap = {};
+    const relsFile = zip.file('word/_rels/document.xml.rels');
+    if (relsFile) {
+      const relDoc = parseXml(await relsFile.async('string'));
+      for (const rel of Array.from(relDoc.getElementsByTagNameNS(PKG_REL_NS, 'Relationship'))) {
+        const id = rel.getAttribute('Id');
+        const target = rel.getAttribute('Target');
+        const type = rel.getAttribute('Type') || '';
+        if (id && target && type.includes('image')) relMap[id] = target;
+      }
+    }
+
+    const rawBlocks = parseBodyBlocks(docXml);
+
     let pageNum = 1;
-    const paragraphResults = rawParagraphs.map((para, index) => {
-      if (para.startsNewPage && index > 0) pageNum++;
-      const type   = para.inTable ? 'body' : classifyParagraph(para, styleMap);
-      const errors = para.inTable ? [] : checkParagraph(para, type, styleMap);
-      return {
-        index,
-        text:      para.text,
-        type,
-        errors,
-        hasErrors: errors.length > 0,
-        pageNum,
-        startsNewPage: para.startsNewPage,
-        inTable: para.inTable,
-      };
-    });
+    let firstBlock = true;
+    const blockResults = [];
+
+    for (const block of rawBlocks) {
+      if (block.kind === 'p') {
+        if (block.startsNewPage && !firstBlock) pageNum++;
+        firstBlock = false;
+
+        const type = classifyParagraph(block, styleMap);
+        const errors = checkParagraph(block, type, styleMap);
+
+        // Resolve image relationship IDs to base64 data URLs
+        const imageSrcs = [];
+        for (const relId of block.imageRels) {
+          const target = relMap[relId];
+          if (!target) continue;
+          const ext = target.split('.').pop().toLowerCase();
+          if (ext === 'emf' || ext === 'wmf') continue; // not renderable in browsers
+          const imgFile = zip.file('word/' + target);
+          if (!imgFile) continue;
+          const mimes = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp' };
+          const mime = mimes[ext] || ('image/' + ext);
+          const base64 = await imgFile.async('base64');
+          imageSrcs.push(`data:${mime};base64,${base64}`);
+        }
+
+        blockResults.push({
+          kind: 'p',
+          text: block.text,
+          type,
+          errors,
+          hasErrors: errors.length > 0,
+          pageNum,
+          startsNewPage: block.startsNewPage,
+          imageSrcs,
+        });
+      } else if (block.kind === 'tbl') {
+        firstBlock = false;
+        blockResults.push({ kind: 'tbl', pageNum, rows: block.rows });
+      }
+    }
 
     const totalErrors = marginErrors.length
-      + paragraphResults.filter(p => p.hasErrors).length;
+      + blockResults.filter(b => b.kind === 'p' && b.hasErrors).length;
 
-    return { marginErrors, paragraphResults, totalErrors };
+    return { marginErrors, blockResults, totalErrors };
   }
 
   return {
-    RULES, parseStyles, parseMargins, parseParagraphs,
+    RULES, parseStyles, parseMargins, parseParagraphs, parseBodyBlocks,
     resolveFormatting, classifyParagraph, checkParagraph,
     checkMargins, checkDocument,
   };

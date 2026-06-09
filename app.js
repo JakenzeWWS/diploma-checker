@@ -55,9 +55,9 @@ function renderDocument(results, filename, skipPages) {
 
   document.getElementById('summary-filename').textContent = filename;
 
-  // Count errors only outside skipped pages
-  const activeErrors = results.paragraphResults.filter(p => p.hasErrors && p.pageNum > skipPages).length;
-  const totalActive  = results.marginErrors.length + activeErrors;
+  const activeErrors = results.blockResults
+    .filter(b => b.kind === 'p' && b.hasErrors && b.pageNum > skipPages).length;
+  const totalActive = results.marginErrors.length + activeErrors;
 
   const errEl = document.getElementById('summary-errors');
   if (totalActive === 0) {
@@ -83,22 +83,22 @@ function renderDocument(results, filename, skipPages) {
     marginBanner.hidden = true;
   }
 
-  // Group paragraphs by page number
+  // Group blocks by page number
   const pages = [];
   let lastPageNum = -1;
-  results.paragraphResults.forEach(para => {
-    if (para.pageNum !== lastPageNum) {
+  results.blockResults.forEach(block => {
+    if (block.pageNum !== lastPageNum) {
       pages.push([]);
-      lastPageNum = para.pageNum;
+      lastPageNum = block.pageNum;
     }
-    pages[pages.length - 1].push(para);
+    pages[pages.length - 1].push(block);
   });
 
   const docView = document.getElementById('document-view');
   docView.innerHTML = '';
 
-  pages.forEach(pageParagraphs => {
-    const pageNum   = pageParagraphs[0].pageNum;
+  pages.forEach(pageBlocks => {
+    const pageNum   = pageBlocks[0].pageNum;
     const isSkipped = pageNum <= skipPages;
 
     const pageEl = document.createElement('div');
@@ -111,36 +111,70 @@ function renderDocument(results, filename, skipPages) {
       pageEl.appendChild(notice);
     }
 
-    pageParagraphs.forEach(para => {
-      const wrapper = document.createElement('div');
-
-      if (!para.text.trim()) {
-        wrapper.className = 'para para-empty';
-        pageEl.appendChild(wrapper);
-        return;
+    pageBlocks.forEach(block => {
+      if (block.kind === 'p') {
+        renderParagraph(block, pageEl, isSkipped);
+      } else if (block.kind === 'tbl') {
+        renderTable(block, pageEl);
       }
-
-      if (para.inTable) {
-        wrapper.className = 'para para-table-cell';
-        wrapper.textContent = para.text;
-        pageEl.appendChild(wrapper);
-        return;
-      }
-
-      const typeClass = para.type === 'heading' ? 'para-heading' : 'para-body';
-      wrapper.className = 'para ' + typeClass;
-      wrapper.textContent = para.text;
-
-      if (para.hasErrors && !isSkipped) {
-        wrapper.classList.add('para-error');
-        wrapper.appendChild(buildTooltip(para.errors));
-      }
-
-      pageEl.appendChild(wrapper);
     });
 
     docView.appendChild(pageEl);
   });
+}
+
+function renderParagraph(para, container, isSkipped) {
+  const wrapper = document.createElement('div');
+
+  const hasImages = para.imageSrcs && para.imageSrcs.length > 0;
+
+  if (!para.text.trim() && !hasImages) {
+    wrapper.className = 'para para-empty';
+    container.appendChild(wrapper);
+    return;
+  }
+
+  const typeClass = para.type === 'heading' ? 'para-heading' : 'para-body';
+  wrapper.className = 'para ' + typeClass;
+
+  if (hasImages) {
+    para.imageSrcs.forEach(src => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.className = 'doc-image';
+      wrapper.appendChild(img);
+    });
+  }
+
+  if (para.text.trim()) {
+    const span = document.createElement('span');
+    span.textContent = para.text;
+    wrapper.appendChild(span);
+  }
+
+  if (para.hasErrors && !isSkipped) {
+    wrapper.classList.add('para-error');
+    wrapper.appendChild(buildTooltip(para.errors));
+  }
+
+  container.appendChild(wrapper);
+}
+
+function renderTable(tbl, container) {
+  const table = document.createElement('table');
+  table.className = 'doc-table';
+
+  tbl.rows.forEach(row => {
+    const tr = document.createElement('tr');
+    row.cells.forEach(cell => {
+      const td = document.createElement('td');
+      if (cell.text) td.textContent = cell.text;
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+
+  container.appendChild(table);
 }
 
 function buildTooltip(errors) {
@@ -205,7 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
     showState('upload');
   });
 
-  // Re-render when skip-pages value changes (no re-parsing needed)
   if (skipInput) {
     skipInput.addEventListener('change', () => {
       if (_lastResults) renderDocument(_lastResults, _lastFilename, getSkipPages());
