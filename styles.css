@@ -406,6 +406,31 @@ body {
 
 .tpl-input::placeholder { color: #93c5fd; }
 
+/* Long placeholder — full-width textarea */
+.tpl-textarea {
+  display: block;
+  width: 100%;
+  font-family: 'Times New Roman', serif;
+  font-size: inherit;
+  line-height: inherit;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1.5px solid #93c5fd;
+  border-radius: 4px;
+  padding: 4px 6px;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.tpl-textarea:focus {
+  background: #dbeafe;
+  border-color: #1d4ed8;
+}
+
+.tpl-textarea::placeholder { color: #93c5fd; }
+
 /* ── Print styles ─────────────────────────────────────── */
 
 @media print {
@@ -432,7 +457,12 @@ body {
     background: transparent;
     border: none;
     border-bottom: 1px solid #000;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  }
+
+  .tpl-textarea {
+    color: #000;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #000;
   }
 }
